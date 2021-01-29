@@ -1,0 +1,10 @@
+{
+  "mainnet": {
+    "lendingPoolAddressesProvider": "0xb53c1a33016b2dc2ff3653530bff1848a515c8c5",
+    "lendingPool":"0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"
+  },
+  "kovan": {
+    "lendingPoolAddressesProvider": "0x88757f2f99175387ab4c6a4b3067c77a695b0349",
+    "lendingPool": "0x9fe532197ad76c5a68961439604c037eb79681f0"
+  }
+}
