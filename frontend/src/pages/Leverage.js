@@ -35,6 +35,11 @@ const useStyles = makeStyles(theme => ({
   leverageSlider: {
     width: 100,
   },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    columnGap: '10px',
+  },
 }));
 
 export default function() {
@@ -43,41 +48,113 @@ export default function() {
     connect,
     isLoaded: walletIsLoaded,
     signer,
+    wethGatewayContract,
     lendingPoolContract,
   } = useWallet();
   const { address } = useWallet();
   const [isLoaded, setIsLoaded] = React.useState(false);
+  const [collaterals, setCollaterals] = React.useState([]);
   const [debts, setDebts] = React.useState([]);
 
   React.useEffect(() => {
     if (!walletIsLoaded) return;
-    if (!(lendingPoolContract && address)) return setIsLoaded(true);
+    if (!(signer && lendingPoolContract && wethGatewayContract && address))
+      return;
 
     let isMounted = true;
     const unsubs = [() => (isMounted = false)];
 
-    const getDebt = async reserve => {
-      const ercContract = new ethers.Contract(reserve, ERC20_ABI, signer);
-      const [symbol, amount] = await Promise.all([
-        ercContract.symbol(),
-        ercContract.balanceOf(address),
+    const getCollateralIf = async (
+      userConfigData,
+      reserveAddress,
+      reserveIndex
+    ) => {
+      const isCollateral =
+        (userConfigData >> (reserveIndex * 2 + 1)) & (1 != 0);
+      if (!isCollateral) return;
+      const reserveData = await lendingPoolContract.getReserveData(
+        reserveAddress
+      );
+      return getCollateral(reserveAddress, reserveData.aTokenAddress);
+    };
+
+    const getCollateral = async (reserveAddress, reserveATokenAddress) => {
+      const aTokenContract = new ethers.Contract(
+        reserveATokenAddress,
+        ERC20_ABI,
+        signer
+      );
+      const [amount] = await Promise.all([aTokenContract.balanceOf(address)]);
+      if (amount.isZero()) return;
+
+      const tokenContract = new ethers.Contract(
+        reserveAddress,
+        ERC20_ABI,
+        signer
+      );
+
+      const [symbol, decimals] = await Promise.all([
+        tokenContract.symbol(),
+        tokenContract.decimals(),
       ]);
       return {
-        contract: ercContract,
+        contract: tokenContract,
         symbol,
-        reserve,
+        decimals,
+        reserveAddress,
+        amount,
+      };
+    };
+
+    const getDebt = async reserveAddress => {
+      const tokenContract = new ethers.Contract(
+        reserveAddress,
+        ERC20_ABI,
+        signer
+      );
+      const [amount] = await Promise.all([tokenContract.balanceOf(address)]);
+      if (amount.isZero()) return;
+
+      const [symbol, decimals] = await Promise.all([
+        tokenContract.symbol(),
+        tokenContract.decimals(),
+      ]);
+      return {
+        contract: tokenContract,
+        symbol,
+        decimals,
+        reserveAddress,
         amount,
       };
     };
 
     const load = async () => {
+      const [reserveAddresses, userConfig] = await Promise.all([
+        lendingPoolContract.getReservesList(),
+        lendingPoolContract.getUserConfiguration(address),
+      ]);
+      const x = await Promise.all([
+        ...reserveAddresses.map(getCollateralIf.bind(null, userConfig.data)),
+        ...reserveAddresses.map(getDebt),
+      ]);
+      const collaterals = x.splice(0, reserveAddresses.length);
+      const debts = x;
+
+      const [wethAddress, aWETHAddress] = await Promise.all([
+        wethGatewayContract.getWETHAddress(),
+        wethGatewayContract.getAWETHAddress(),
+      ]);
+      const [wethCollateral, wethDebt] = await Promise.all([
+        getCollateral(wethAddress, aWETHAddress),
+        getDebt(wethAddress),
+      ]);
+
+      collaterals.push(wethCollateral);
+      debts.push(wethDebt);
+
       if (isMounted) {
-        setIsLoaded(false);
-      }
-      const reserves = await lendingPoolContract.getReservesList();
-      const debts = await Promise.all(reserves.map(getDebt));
-      if (isMounted) {
-        setDebts(debts.filter(debt => !debt.amount.isZero()));
+        setDebts(debts.filter(o => !!o));
+        setCollaterals(collaterals.filter(o => !!o));
         setIsLoaded(true);
       }
     };
@@ -89,14 +166,26 @@ export default function() {
         address
       );
       const repayEvent = lendingPoolContract.filters.Repay(null, address);
+      const depositEvent = lendingPoolContract.filters.Borrow(
+        null,
+        null,
+        address
+      );
+      const withdrawEvent = lendingPoolContract.filters.Repay(null, address);
       const onContractEvent = async () => {
         await sleep(1000);
         await load();
       };
       lendingPoolContract.on(borrowEvent, onContractEvent);
       lendingPoolContract.on(repayEvent, onContractEvent);
+      lendingPoolContract.on(depositEvent, onContractEvent);
+      lendingPoolContract.on(withdrawEvent, onContractEvent);
       unsubs.push(() => lendingPoolContract.off(borrowEvent, onContractEvent));
       unsubs.push(() => lendingPoolContract.off(repayEvent, onContractEvent));
+      unsubs.push(() => lendingPoolContract.off(depositEvent, onContractEvent));
+      unsubs.push(() =>
+        lendingPoolContract.off(withdrawEvent, onContractEvent)
+      );
     };
 
     load();
@@ -104,7 +193,13 @@ export default function() {
     return () => {
       unsubs.forEach(unsub => unsub());
     };
-  }, [lendingPoolContract, address]);
+  }, [
+    signer,
+    walletIsLoaded,
+    lendingPoolContract,
+    wethGatewayContract,
+    address,
+  ]);
 
   return (
     <Box className={clsx(classes.container, 'text-center')}>
@@ -122,61 +217,90 @@ export default function() {
         </Box>
       ) : !isLoaded ? (
         <Loader />
-      ) : !debts.length ? (
-        <div>You have no debts.</div>
       ) : (
-        <>
-          <h2 className="text-left">Current Borrows</h2>
-          <Table className={classes.table} aria-label="debts">
-            <TableHead>
-              <TableRow>
-                <TableCell>Asset</TableCell>
-                <TableCell>Amount</TableCell>
-                <TableCell>Leverage</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {debts.map(debt => (
-                <Debt key={debt.reserve} {...{ debt }} />
-              ))}
-            </TableBody>
-          </Table>
-        </>
+        <Box className={classes.grid}>
+          <Box>
+            <h2 className="text-left">Your Collateral</h2>
+            {!collaterals.length ? (
+              <Box>You have no collateral.</Box>
+            ) : (
+              <Table className={classes.table} aria-label="collateral">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Asset</TableCell>
+                    <TableCell>Amount</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {collaterals.map(collateral => (
+                    <Collateral
+                      key={collateral.reserveAddress}
+                      {...{ collateral }}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Box>
+          <Box>
+            <h2 className="text-left">Your Borrows</h2>
+            {!debts.length ? (
+              <Box>You have no debts.</Box>
+            ) : (
+              <Table className={classes.table} aria-label="debts">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Asset</TableCell>
+                    <TableCell>Amount</TableCell>
+                    <TableCell>Leverage</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {debts.map(debt => (
+                    <Debt key={debt.reserveAddress} {...{ debt }} />
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Box>
+        </Box>
       )}
     </Box>
   );
 }
 
+function Collateral({ collateral }) {
+  // const classes = useStyles();
+
+  return (
+    <TableRow>
+      <TableCell component="th" scope="row">
+        {collateral.symbol}
+      </TableCell>
+      <TableCell>
+        {formatUnits(collateral.amount, collateral.decimals, 2)}
+      </TableCell>
+    </TableRow>
+  );
+}
+
 function Debt({ debt }) {
   const classes = useStyles();
-  const { showErrorNotification, tx } = useNotifications();
-  // const [isClosing, setIsClosing] = React.useState(false);
-  // const {
-  //   collateralContracts,
-  //   config: { multiCollateralTokenCurrenciesByAddress },
-  // } = useWallet();
-  // const {
-  //   showTxNotification,
-  //   showErrorNotification,
-  //   showSuccessNotification,
-  // } = useNotifications();
+  const { tx } = useNotifications();
+  const [isWorking, setIsWorking] = React.useState(false);
+  const [leverage, setLeverage] = React.useState(2);
+  const { leverageContract, address } = useWallet();
 
-  // const close = async () => {
-  //   try {
-  //     setIsClosing(true);
-  //     const tx = await collateralContracts[loan.type].close(loan.id);
-  //     showTxNotification(`Closing loan(#${loan.id.toString()})`, tx.hash);
-  //     await tx.wait();
-  //     showSuccessNotification(
-  //       `Loan(#${loan.id.toString()}) successfully closed.`,
-  //       tx.hash
-  //     );
-  //   } catch (e) {
-  //     showErrorNotification(e);
-  //   } finally {
-  //     setIsClosing(false);
-  //   }
-  // };
+  const applyLeverage = async () => {
+    try {
+      setIsWorking('Applying...');
+      await tx('Applying...', 'Applied!', () =>
+        leverageContract.apply(debt.reserveAddress, address, leverage)
+      );
+    } finally {
+      setIsWorking(false);
+    }
+  };
 
   function valueText(value) {
     return `${value}x`;
@@ -187,12 +311,12 @@ function Debt({ debt }) {
       <TableCell component="th" scope="row">
         {debt.symbol}
       </TableCell>
-      <TableCell>{formatUnits(debt.amount, 18, 2)}</TableCell>
+      <TableCell>{formatUnits(debt.amount, debt.decimals, 2)}</TableCell>
       <TableCell>
-        <div className="flex">
+        <Box className="flex">
           <Box mr={1}>
             <Slider
-              defaultValue={2}
+              value={leverage}
               getAriaValueText={valueText}
               aria-labelledby="leverage-slider"
               valueLabelDisplay="auto"
@@ -200,12 +324,19 @@ function Debt({ debt }) {
               min={1}
               max={3}
               className={classes.leverageSlider}
+              disabled={!!isWorking}
+              onChange={(event, leverage) => setLeverage(leverage)}
             />
           </Box>
-          <Button color="secondary" variant="outlined">
+          <Button
+            color="secondary"
+            variant="outlined"
+            disabled={!!isWorking}
+            onClick={applyLeverage}
+          >
             APPLY
           </Button>
-        </div>
+        </Box>
       </TableCell>
     </TableRow>
   );

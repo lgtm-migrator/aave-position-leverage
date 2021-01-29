@@ -1,10 +1,10 @@
 {
   "mainnet": {
-    "lendingPoolAddressesProvider": "0xb53c1a33016b2dc2ff3653530bff1848a515c8c5",
-    "lendingPool":"0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9"
+    "addressesProvider":"0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5",
+    "wethGateway": "0xDcD33426BA191383f1c9B431A342498fdac73488"
   },
   "kovan": {
-    "lendingPoolAddressesProvider": "0x88757f2f99175387ab4c6a4b3067c77a695b0349",
-    "lendingPool": "0x9fe532197ad76c5a68961439604c037eb79681f0"
+    "addressesProvider": "0x88757f2f99175387aB4C6a4b3067c77A695b0349",
+    "wethGateway": "0xf8aC10E65F2073460aAD5f28E1EABE807DC287CF"
   }
 }

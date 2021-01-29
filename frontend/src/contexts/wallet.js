@@ -5,7 +5,8 @@ import { CACHE_WALLET_KEY, INFURA_ID } from 'config';
 import cache from 'utils/cache';
 import NETWORKS from 'networks.json';
 import LENDING_POOL_ABI from 'abis/LendingPool.json';
-// import ERC20_ABI from 'abis/ERC20.json';
+import WETH_GATEWAY_ABI from 'abis/WETHGateway.json';
+import ADDRESSES_PROVIDER_ABI from 'abis/AddressesProvider.json';
 
 const DEFAULT_NETWORK_ID = 1;
 
@@ -27,19 +28,43 @@ export function WalletProvider({ children }) {
   const [address, setAddress] = React.useState(null);
   const [signer, setSigner] = React.useState(null);
   const [network, setNetwork] = React.useState('');
+  const [lendingPoolAddress, setLendingPoolAddress] = React.useState(null);
+  const [wethGatewayAddress, setWETHGatewayAddress] = React.useState(null);
 
   const cfg = React.useMemo(() => {
     if (!network) return {};
     return NETWORKS[network] ?? {};
   }, [network]);
 
+  const addressesProviderContract = React.useMemo(
+    () =>
+      signer &&
+      cfg.addressesProvider &&
+      new ethers.Contract(
+        cfg.addressesProvider,
+        ADDRESSES_PROVIDER_ABI,
+        signer
+      ),
+    [signer, cfg.addressesProvider]
+  );
+
   const lendingPoolContract = React.useMemo(
     () =>
       signer &&
-      cfg.lendingPool &&
-      new ethers.Contract(cfg.lendingPool, LENDING_POOL_ABI, signer),
-    [signer, cfg.lendingPool]
+      lendingPoolAddress &&
+      new ethers.Contract(lendingPoolAddress, LENDING_POOL_ABI, signer),
+    [signer, lendingPoolAddress]
   );
+
+  const wethGatewayContract = React.useMemo(
+    () =>
+      signer &&
+      wethGatewayAddress &&
+      new ethers.Contract(wethGatewayAddress, WETH_GATEWAY_ABI, signer),
+    [signer, wethGatewayAddress]
+  );
+
+  const leverageContract = 1;
 
   const connect = React.useCallback(
     async tryCached => {
@@ -123,6 +148,19 @@ export function WalletProvider({ children }) {
     return () => (isMounted = false);
   }, [connect]);
 
+  React.useEffect(() => {
+    if (!(addressesProviderContract && cfg.wethGateway)) return;
+    let isMounted = true;
+    (async () => {
+      const _lendingPoolAddress = await addressesProviderContract.getLendingPool();
+      if (isMounted) {
+        setLendingPoolAddress(_lendingPoolAddress);
+        setWETHGatewayAddress(cfg.wethGateway);
+      }
+    })();
+    return () => (isMounted = false);
+  }, [addressesProviderContract, cfg.wethGateway]);
+
   return (
     <WalletContext.Provider
       value={{
@@ -134,6 +172,8 @@ export function WalletProvider({ children }) {
         network,
         signer,
         lendingPoolContract,
+        wethGatewayContract,
+        leverageContract,
       }}
     >
       {children}
@@ -155,6 +195,8 @@ export function useWallet() {
     network,
     signer,
     lendingPoolContract,
+    wethGatewayContract,
+    leverageContract,
   } = context;
 
   return {
@@ -167,6 +209,8 @@ export function useWallet() {
     signer,
     availableNetworkNames: Object.keys(NETWORKS),
     lendingPoolContract,
+    wethGatewayContract,
+    leverageContract,
   };
 }
 
