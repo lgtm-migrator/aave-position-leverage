@@ -1,4 +1,5 @@
 import React from 'react';
+import fetch from 'unfetch';
 import { ethers } from 'ethers';
 import Onboard from 'bnc-onboard';
 import { CACHE_WALLET_KEY, INFURA_ID } from 'config';
@@ -127,6 +128,18 @@ export function WalletProvider({ children }) {
     setSigner(null);
   }
 
+  const subgraph = React.useCallback(
+    async function(query, variables) {
+      const res = await fetch(cfg.subgraph, {
+        method: 'POST',
+        body: JSON.stringify({ query, variables }),
+      });
+      const { data } = await res.json();
+      return data;
+    },
+    [cfg.subgraph]
+  );
+
   React.useEffect(() => {
     if (!signer) return;
     let isMounted = true;
@@ -174,6 +187,7 @@ export function WalletProvider({ children }) {
         lendingPoolContract,
         wethGatewayContract,
         leverageContract,
+        subgraph,
       }}
     >
       {children}
@@ -197,6 +211,7 @@ export function useWallet() {
     lendingPoolContract,
     wethGatewayContract,
     leverageContract,
+    subgraph,
   } = context;
 
   return {
@@ -211,6 +226,7 @@ export function useWallet() {
     lendingPoolContract,
     wethGatewayContract,
     leverageContract,
+    subgraph,
   };
 }
 

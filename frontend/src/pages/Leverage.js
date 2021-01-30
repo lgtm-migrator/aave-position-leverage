@@ -12,11 +12,10 @@ import {
   TableRow,
   Slider,
 } from '@material-ui/core';
-import { formatUnits } from 'utils/big-number';
+import { formatUnits, isZero } from 'utils/big-number';
 import { useWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
-import ERC20_ABI from 'abis/ERC20.json';
 import sleep from 'utils/sleep';
 import Loader from 'components/Loader';
 
@@ -50,10 +49,11 @@ export default function() {
     signer,
     wethGatewayContract,
     lendingPoolContract,
+    subgraph,
   } = useWallet();
   const { address } = useWallet();
   const [isLoaded, setIsLoaded] = React.useState(false);
-  const [collaterals, setCollaterals] = React.useState([]);
+  const [deposits, setDeposits] = React.useState([]);
   const [debts, setDebts] = React.useState([]);
 
   React.useEffect(() => {
@@ -64,97 +64,72 @@ export default function() {
     let isMounted = true;
     const unsubs = [() => (isMounted = false)];
 
-    const getCollateralIf = async (
-      userConfigData,
-      reserveAddress,
-      reserveIndex
-    ) => {
-      const isCollateral =
-        (userConfigData >> (reserveIndex * 2 + 1)) & (1 != 0);
-      if (!isCollateral) return;
-      const reserveData = await lendingPoolContract.getReserveData(
-        reserveAddress
-      );
-      return getCollateral(reserveAddress, reserveData.aTokenAddress);
-    };
-
-    const getCollateral = async (reserveAddress, reserveATokenAddress) => {
-      const aTokenContract = new ethers.Contract(
-        reserveATokenAddress,
-        ERC20_ABI,
-        signer
-      );
-      const [amount] = await Promise.all([aTokenContract.balanceOf(address)]);
-      if (amount.isZero()) return;
-
-      const tokenContract = new ethers.Contract(
-        reserveAddress,
-        ERC20_ABI,
-        signer
-      );
-
-      const [symbol, decimals] = await Promise.all([
-        tokenContract.symbol(),
-        tokenContract.decimals(),
-      ]);
-      return {
-        contract: tokenContract,
-        symbol,
-        decimals,
-        reserveAddress,
-        amount,
-      };
-    };
-
-    const getDebt = async reserveAddress => {
-      const tokenContract = new ethers.Contract(
-        reserveAddress,
-        ERC20_ABI,
-        signer
-      );
-      const [amount] = await Promise.all([tokenContract.balanceOf(address)]);
-      if (amount.isZero()) return;
-
-      const [symbol, decimals] = await Promise.all([
-        tokenContract.symbol(),
-        tokenContract.decimals(),
-      ]);
-      return {
-        contract: tokenContract,
-        symbol,
-        decimals,
-        reserveAddress,
-        amount,
-      };
-    };
-
     const load = async () => {
-      const [reserveAddresses, userConfig] = await Promise.all([
-        lendingPoolContract.getReservesList(),
-        lendingPoolContract.getUserConfiguration(address),
-      ]);
-      const x = await Promise.all([
-        ...reserveAddresses.map(getCollateralIf.bind(null, userConfig.data)),
-        ...reserveAddresses.map(getDebt),
-      ]);
-      const collaterals = x.splice(0, reserveAddresses.length);
-      const debts = x;
+      const deposits = [];
+      const debts = [];
 
-      const [wethAddress, aWETHAddress] = await Promise.all([
-        wethGatewayContract.getWETHAddress(),
-        wethGatewayContract.getAWETHAddress(),
-      ]);
-      const [wethCollateral, wethDebt] = await Promise.all([
-        getCollateral(wethAddress, aWETHAddress),
-        getDebt(wethAddress),
-      ]);
+      const { users } = await subgraph(
+        `
+        query ($address: String) {
+          users(where: {id: $address}) {
+            reserves {
+              reserve {
+                id
+                symbol
+                decimals
+                usageAsCollateralEnabled
+              }
+              currentATokenBalance
+              currentVariableDebt
+              currentStableDebt
+            }
+          }
+        }
+        
+      `,
+        {
+          address: address.toLowerCase(),
+        }
+      );
 
-      collaterals.push(wethCollateral);
-      debts.push(wethDebt);
+      users.forEach(({ reserves }) => {
+        reserves.forEach(
+          ({
+            currentATokenBalance,
+            currentVariableDebt,
+            currentStableDebt,
+            reserve,
+          }) => {
+            if (!isZero(currentATokenBalance)) {
+              deposits.push({
+                ...reserve,
+                amount: currentATokenBalance,
+                key: reserve.id,
+                usageAsCollateralEnabled: reserve.usageAsCollateralEnabled,
+              });
+            }
+            if (!isZero(currentVariableDebt)) {
+              debts.push({
+                ...reserve,
+                amount: currentVariableDebt,
+                variable: true,
+                key: `${reserve.id}-variable`,
+              });
+            }
+            if (!isZero(currentStableDebt)) {
+              debts.push({
+                ...reserve,
+                amount: currentStableDebt,
+                key: `${reserve.id}-stable`,
+              });
+            }
+          }
+        );
+      });
 
       if (isMounted) {
-        setDebts(debts.filter(o => !!o));
-        setCollaterals(collaterals.filter(o => !!o));
+        setDebts(debts);
+        setDeposits(deposits);
         setIsLoaded(true);
       }
     };
@@ -166,12 +141,12 @@ export default function() {
         address
       );
       const repayEvent = lendingPoolContract.filters.Repay(null, address);
-      const depositEvent = lendingPoolContract.filters.Borrow(
+      const depositEvent = lendingPoolContract.filters.Deposit(
         null,
         null,
         address
       );
-      const withdrawEvent = lendingPoolContract.filters.Repay(null, address);
+      const withdrawEvent = lendingPoolContract.filters.Withdraw(null, address);
       const onContractEvent = async () => {
         await sleep(1000);
         await load();
@@ -199,6 +174,7 @@ export default function() {
     lendingPoolContract,
     wethGatewayContract,
     address,
+    subgraph,
   ]);
 
   return (
@@ -220,30 +196,28 @@ export default function() {
       ) : (
         <Box className={classes.grid}>
           <Box>
-            <h2 className="text-left">Your Collateral</h2>
-            {!collaterals.length ? (
-              <Box>You have no collateral.</Box>
+            <h2>Your Deposits</h2>
+            {!deposits.length ? (
+              <Box>You have no deposits.</Box>
             ) : (
-              <Table className={classes.table} aria-label="collateral">
+              <Table className={classes.table} aria-label="deposit">
                 <TableHead>
                   <TableRow>
                     <TableCell>Asset</TableCell>
                     <TableCell>Amount</TableCell>
+                    <TableCell></TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {collaterals.map(collateral => (
-                    <Collateral
-                      key={collateral.reserveAddress}
-                      {...{ collateral }}
-                    />
+                  {deposits.map(deposit => (
+                    <Deposit key={deposit.key} {...{ deposit }} />
                   ))}
                 </TableBody>
               </Table>
             )}
           </Box>
           <Box>
-            <h2 className="text-left">Your Borrows</h2>
+            <h2>Your Debts</h2>
             {!debts.length ? (
               <Box>You have no debts.</Box>
             ) : (
@@ -252,12 +226,13 @@ export default function() {
                   <TableRow>
                     <TableCell>Asset</TableCell>
                     <TableCell>Amount</TableCell>
-                    <TableCell>Leverage</TableCell>
+                    <TableCell>Type</TableCell>
+                    <TableCell>Lever Up</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {debts.map(debt => (
-                    <Debt key={debt.reserveAddress} {...{ debt }} />
+                    <Debt key={debt.key} {...{ debt }} />
                   ))}
                 </TableBody>
               </Table>
@@ -269,16 +244,17 @@ export default function() {
   );
 }
 
-function Collateral({ collateral }) {
+function Deposit({ deposit }) {
   // const classes = useStyles();
 
   return (
     <TableRow>
       <TableCell component="th" scope="row">
-        {collateral.symbol}
+        {deposit.symbol}
       </TableCell>
+      <TableCell>{formatUnits(deposit.amount, deposit.decimals, 2)}</TableCell>
       <TableCell>
-        {formatUnits(collateral.amount, collateral.decimals, 2)}
+        {deposit.usageAsCollateralEnabled ? 'true' : 'false'}
       </TableCell>
     </TableRow>
   );
@@ -295,7 +271,11 @@ function Debt({ debt }) {
     try {
       setIsWorking('Applying...');
       await tx('Applying...', 'Applied!', () =>
-        leverageContract.apply(debt.reserveAddress, address, leverage)
+        leverageContract.apply(
+          debt.key,
+          address,
+          ethers.BigNumber.from(leverage)
+        )
       );
     } finally {
       setIsWorking(false);
@@ -312,6 +292,7 @@ function Debt({ debt }) {
         {debt.symbol}
       </TableCell>
       <TableCell>{formatUnits(debt.amount, debt.decimals, 2)}</TableCell>
+      <TableCell>{debt.variable ? 'variable' : 'stable'}</TableCell>
       <TableCell>
         <Box className="flex">
           <Box mr={1}>
