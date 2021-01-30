@@ -13,13 +13,14 @@ import {
   Slider,
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
+import { constructLoanParameters } from 'utils/takeloan';
 import { useWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
 import sleep from 'utils/sleep';
 import Loader from 'components/Loader';
 
-const useStyles = makeStyles(theme => ({
+const useStyles = makeStyles((theme) => ({
   container: {
     '& th, td': {
       borderColor: 'rgba(16, 161, 204, 0.2)',
@@ -41,7 +42,7 @@ const useStyles = makeStyles(theme => ({
   },
 }));
 
-export default function() {
+export default function () {
   const classes = useStyles();
   const {
     connect,
@@ -78,6 +79,9 @@ export default function() {
                 symbol
                 decimals
                 usageAsCollateralEnabled
+                aToken {
+                  underlyingAssetAddress
+                }
               }
               currentATokenBalance
               currentVariableDebt
@@ -103,6 +107,7 @@ export default function() {
             if (!isZero(currentATokenBalance)) {
               deposits.push({
                 ...reserve,
+                collateral: reserve.aToken.underlyingAssetAddress,
                 amount: currentATokenBalance,
                 key: reserve.id,
                 usageAsCollateralEnabled: reserve.usageAsCollateralEnabled,
@@ -111,6 +116,7 @@ export default function() {
             if (!isZero(currentVariableDebt)) {
               debts.push({
                 ...reserve,
+                collateral: reserve.aToken.underlyingAssetAddress,
                 amount: currentVariableDebt,
                 variable: true,
                 key: `${reserve.id}-variable`,
@@ -166,7 +172,7 @@ export default function() {
     load();
     subscribe();
     return () => {
-      unsubs.forEach(unsub => unsub());
+      unsubs.forEach((unsub) => unsub());
     };
   }, [
     signer,
@@ -209,7 +215,7 @@ export default function() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {deposits.map(deposit => (
+                  {deposits.map((deposit) => (
                     <Deposit key={deposit.key} {...{ deposit }} />
                   ))}
                 </TableBody>
@@ -231,7 +237,7 @@ export default function() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {debts.map(debt => (
+                  {debts.map((debt) => (
                     <Debt key={debt.key} {...{ debt }} />
                   ))}
                 </TableBody>
@@ -271,7 +277,7 @@ function Debt({ debt }) {
     try {
       setIsWorking('Applying...');
       await tx('Applying...', 'Applied!', () =>
-        leverageContract.apply(
+        leverageContract.letsdoit(
           debt.key,
           address,
           ethers.BigNumber.from(leverage)

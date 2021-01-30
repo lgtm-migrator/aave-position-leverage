@@ -7,6 +7,7 @@ import cache from 'utils/cache';
 import NETWORKS from 'networks.json';
 import LENDING_POOL_ABI from 'abis/LendingPool.json';
 import WETH_GATEWAY_ABI from 'abis/WETHGateway.json';
+import FLASH_LOAN_ABI from 'abis/FlashLoan.json';
 import ADDRESSES_PROVIDER_ABI from 'abis/AddressesProvider.json';
 
 const DEFAULT_NETWORK_ID = 1;
@@ -31,6 +32,7 @@ export function WalletProvider({ children }) {
   const [network, setNetwork] = React.useState('');
   const [lendingPoolAddress, setLendingPoolAddress] = React.useState(null);
   const [wethGatewayAddress, setWETHGatewayAddress] = React.useState(null);
+  const [flashLoanAddress, setFlashLoanAddress] = React.useState(null);
 
   const cfg = React.useMemo(() => {
     if (!network) return {};
@@ -65,10 +67,16 @@ export function WalletProvider({ children }) {
     [signer, wethGatewayAddress]
   );
 
-  const leverageContract = 1;
+  const leverageContract = React.useMemo(
+    () =>
+      signer &&
+      flashLoanAddress &&
+      new ethers.Contract(flashLoanAddress, FLASH_LOAN_ABI, signer),
+    [signer, flashLoanAddress]
+  );
 
   const connect = React.useCallback(
-    async tryCached => {
+    async (tryCached) => {
       if (address) return;
 
       let cachedWallet;
@@ -129,7 +137,7 @@ export function WalletProvider({ children }) {
   }
 
   const subgraph = React.useCallback(
-    async function(query, variables) {
+    async function (query, variables) {
       const res = await fetch(cfg.subgraph, {
         method: 'POST',
         body: JSON.stringify({ query, variables }),
@@ -169,6 +177,7 @@ export function WalletProvider({ children }) {
       if (isMounted) {
         setLendingPoolAddress(_lendingPoolAddress);
         setWETHGatewayAddress(cfg.wethGateway);
+        setFlashLoanAddress(cfg.flashLoanAddress);
       }
     })();
     return () => (isMounted = false);

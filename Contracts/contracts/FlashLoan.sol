@@ -23,6 +23,8 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
         FlashLoanReceiverBase(_addressProvider)
     {}
 
+    event loanExecutionSuccess(address owner);
+
     /*  function uint2str(uint _i) internal pure returns (string memory _uintAsString) {
         if (_i == 0) {
             return "0";
@@ -72,6 +74,8 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
         );
 
         transferFundsBackToPoolInternal(_reserve, totalDebt);
+
+        emit loanExecutionSuccess(msg.sender);
     }
 
     function initiateFlashLoan(

@@ -1,12 +1,14 @@
 {
   "mainnet": {
-    "addressesProvider":"0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5",
+    "addressesProvider": "0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5",
     "wethGateway": "0xDcD33426BA191383f1c9B431A342498fdac73488",
+    "flashLoanAddress": "0x",
     "subgraph": "https://api.thegraph.com/subgraphs/name/aave/protocol-v2"
   },
   "kovan": {
     "addressesProvider": "0x88757f2f99175387aB4C6a4b3067c77A695b0349",
     "wethGateway": "0xf8aC10E65F2073460aAD5f28E1EABE807DC287CF",
+    "flashLoanAddress": "0x",
     "subgraph": "https://api.thegraph.com/subgraphs/name/aave/protocol-v2-kovan"
   }
 }
