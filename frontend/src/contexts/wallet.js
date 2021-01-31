@@ -8,6 +8,7 @@ import NETWORKS from 'networks.json';
 import LENDING_POOL_ABI from 'abis/LendingPool.json';
 import WETH_GATEWAY_ABI from 'abis/WETHGateway.json';
 import FLASH_LOAN_ABI from 'abis/FlashLoan.json';
+import CHAINLINK_PRICE_ORACLE_ABI from 'abis/ChainlinkPriceOracle.json';
 import ADDRESSES_PROVIDER_ABI from 'abis/AddressesProvider.json';
 
 const DEFAULT_NETWORK_ID = 1;
@@ -33,6 +34,10 @@ export function WalletProvider({ children }) {
   const [lendingPoolAddress, setLendingPoolAddress] = React.useState(null);
   const [wethGatewayAddress, setWETHGatewayAddress] = React.useState(null);
   const [flashLoanAddress, setFlashLoanAddress] = React.useState(null);
+  const [
+    ChainLinkPriceOracleAddress,
+    setChainLinkPriceOracleAddress,
+  ] = React.useState(null);
 
   const cfg = React.useMemo(() => {
     if (!network) return {};
@@ -75,8 +80,20 @@ export function WalletProvider({ children }) {
     [signer, flashLoanAddress]
   );
 
+  const priceOracleContract = React.useMemo(
+    () =>
+      signer &&
+      ChainLinkPriceOracleAddress &&
+      new ethers.Contract(
+        ChainLinkPriceOracleAddress,
+        CHAINLINK_PRICE_ORACLE_ABI,
+        signer
+      ),
+    [signer, ChainLinkPriceOracleAddress]
+  );
+
   const connect = React.useCallback(
-    async (tryCached) => {
+    async tryCached => {
       if (address) return;
 
       let cachedWallet;
@@ -137,7 +154,7 @@ export function WalletProvider({ children }) {
   }
 
   const subgraph = React.useCallback(
-    async function (query, variables) {
+    async function(query, variables) {
       const res = await fetch(cfg.subgraph, {
         method: 'POST',
         body: JSON.stringify({ query, variables }),
@@ -178,6 +195,7 @@ export function WalletProvider({ children }) {
         setLendingPoolAddress(_lendingPoolAddress);
         setWETHGatewayAddress(cfg.wethGateway);
         setFlashLoanAddress(cfg.flashLoanAddress);
+        setChainLinkPriceOracleAddress(cfg.ChainLinkPriceOracleAddress);
       }
     })();
     return () => (isMounted = false);
@@ -196,6 +214,7 @@ export function WalletProvider({ children }) {
         lendingPoolContract,
         wethGatewayContract,
         leverageContract,
+        priceOracleContract,
         subgraph,
       }}
     >
@@ -220,6 +239,7 @@ export function useWallet() {
     lendingPoolContract,
     wethGatewayContract,
     leverageContract,
+    priceOracleContract,
     subgraph,
   } = context;
 
@@ -235,6 +255,7 @@ export function useWallet() {
     lendingPoolContract,
     wethGatewayContract,
     leverageContract,
+    priceOracleContract,
     subgraph,
   };
 }

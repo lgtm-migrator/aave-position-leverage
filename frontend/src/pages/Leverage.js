@@ -295,7 +295,7 @@ function Debt({ debt }) {
         leverageContract.letsdoit(
           constructLoanParameters(
             debt.collateral,
-            collateralBalance,
+            debt.collateralBalance,
             debt.LTV / 10000,
             debt.debtToken,
             address,

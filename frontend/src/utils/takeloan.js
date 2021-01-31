@@ -1,5 +1,8 @@
+import NETWORKS from 'networks.json';
 import { ethers } from 'ethers';
+import { useWallet } from 'contexts/wallet';
 const axios = require('axios');
+const { lendingPoolContract, priceOracleContract } = useWallet();
 
 export async function constructLoanParameters(
   collateralToken,
@@ -12,9 +15,20 @@ export async function constructLoanParameters(
 ) {
   /* Arguments Construction */
   var loanTokenAddress = '0x6B175474E89094C44Da98b954EedeAC495271d0F';
-  loanAmount = ethers.utils.parseEther(
-    (collateralAmount * (leverage - 1)).toString()
+
+  var CollateralInLoanToken =
+    priceOracleContract.getAssetPrice(collateralToken) /
+    priceOracleContract.getAssetPrice(loanTokenAddress);
+
+  var LoanTokenInDebt =
+    priceOracleContract.getAssetPrice(loanTokenAddress) /
+    priceOracleContract.getAssetPrice(debtToken);
+
+  var loanAmount = ethers.utils.parseEther(
+    (collateralAmount * (leverage - 1) * CollateralInLoanToken).toString()
   );
+
+  var FlashLoanContractAddress = NETWORKS['flashLoanAddress'];
 
   // Approval for Swap
   var swapApprovalData = '';
@@ -25,10 +39,10 @@ export async function constructLoanParameters(
         '&tokenAddress=' +
         loanTokenAddress
     )
-    .then((response) => {
+    .then(response => {
       swapApprovalData = response.data;
     })
-    .catch((error) => {});
+    .catch(error => {});
 
   // 1Inch Swap
   var oneinchData = '';
@@ -36,7 +50,7 @@ export async function constructLoanParameters(
     .get(
       'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
         loanTokenAddress +
-        '&collateralToken=' +
+        '&toTokenAddress=' +
         collateralToken +
         '&amount=' +
         loanAmount +
@@ -46,10 +60,10 @@ export async function constructLoanParameters(
         slippage +
         '&disableEstimate=true'
     )
-    .then((response) => {
+    .then(response => {
       oneinchData = response.data;
     })
-    .catch((error) => {});
+    .catch(error => {});
 
   // Approval for SwapBack
   let swapBackAmount = oneinchData.toTokenAmount * ((100 - slippage) / 100);
@@ -61,10 +75,10 @@ export async function constructLoanParameters(
         '&tokenAddress=' +
         collateralToken
     )
-    .then((response) => {
+    .then(response => {
       swapBackApprovalData = response.data;
     })
-    .catch((error) => {});
+    .catch(error => {});
 
   // 1inch SwapBack
   let oneinchSwapBackData = '';
@@ -72,7 +86,7 @@ export async function constructLoanParameters(
     .get(
       'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
         collateralToken +
-        '&collateralToken=' +
+        '&toTokenAddress=' +
         loanTokenAddress +
         '&amount=' +
         swapBackAmount +
@@ -82,10 +96,10 @@ export async function constructLoanParameters(
         slippage +
         '&disableEstimate=true'
     )
-    .then((response) => {
+    .then(response => {
       oneinchSwapBackData = response.data;
     })
-    .catch((error) => {});
+    .catch(error => {});
 
   // Operations
   var operations = [
@@ -103,7 +117,31 @@ export async function constructLoanParameters(
       data: oneinchData.tx.data,
       value: oneinchData.tx.value,
     },
-    /* TODO */
+    {
+      // Swap
+      callName: 'Deposit',
+      target: lendingPoolContract.address,
+      data: lendingPoolContract.interface.functions.encode.deposit(
+        collateralToken,
+        swapBackAmount,
+        onbehalf,
+        0
+      ),
+      value: 0,
+    },
+    {
+      // Swap
+      callName: 'Borrow',
+      target: lendingPoolContract.address,
+      data: lendingPoolContract.interface.functions.encode.borrow(
+        debtToken,
+        loanAmount * LoanTokenInDebt,
+        1,
+        0,
+        onbehalf
+      ),
+      value: 0,
+    },
     {
       // Approval for SwapBack
       callName: 'Approval_TO_SWAPBACK',
