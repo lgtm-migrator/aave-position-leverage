@@ -2,8 +2,11 @@ import { ethers } from 'ethers';
 const axios = require('axios');
 
 export async function constructLoanParameters(
-  collateralAmount,
   collateralToken,
+  collateralAmount,
+  collateralLTV,
+  debtToken,
+  onbehalf,
   slippage,
   leverage
 ) {

@@ -79,7 +79,14 @@ export default function () {
                 symbol
                 decimals
                 usageAsCollateralEnabled
+                baseLTVasCollateral
                 aToken {
+                  underlyingAssetAddress
+                }
+                vToken {
+                  underlyingAssetAddress
+                }
+                sToken {
                   underlyingAssetAddress
                 }
               }
@@ -107,7 +114,6 @@ export default function () {
             if (!isZero(currentATokenBalance)) {
               deposits.push({
                 ...reserve,
-                collateral: reserve.aToken.underlyingAssetAddress,
                 amount: currentATokenBalance,
                 key: reserve.id,
                 usageAsCollateralEnabled: reserve.usageAsCollateralEnabled,
@@ -117,6 +123,9 @@ export default function () {
               debts.push({
                 ...reserve,
                 collateral: reserve.aToken.underlyingAssetAddress,
+                collateralBalance: currentATokenBalance,
+                debtToken: reserve.vToken.underlyingAssetAddress,
+                LTV: reserve.baseLTVasCollateral,
                 amount: currentVariableDebt,
                 variable: true,
                 key: `${reserve.id}-variable`,
@@ -125,7 +134,12 @@ export default function () {
             if (!isZero(currentStableDebt)) {
               debts.push({
                 ...reserve,
+                collateral: reserve.aToken.underlyingAssetAddress,
+                collateralBalance: currentATokenBalance,
+                LTV: reserve.baseLTVasCollateral,
+                debtToken: reserve.sToken.underlyingAssetAddress,
                 amount: currentStableDebt,
+                variable: false,
                 key: `${reserve.id}-stable`,
               });
             }
@@ -278,9 +292,15 @@ function Debt({ debt }) {
       setIsWorking('Applying...');
       await tx('Applying...', 'Applied!', () =>
         leverageContract.letsdoit(
-          debt.key,
-          address,
-          ethers.BigNumber.from(leverage)
+          constructLoanParameters(
+            debt.collateral,
+            collateralBalance,
+            debt.LTV / 10000,
+            debt.debtToken,
+            address,
+            slippage,
+            ethers.BigNumber.from(leverage)
+          )
         )
       );
     } finally {
