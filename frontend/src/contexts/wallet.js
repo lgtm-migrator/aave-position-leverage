@@ -11,6 +11,10 @@ import FLASH_LOAN_ABI from 'abis/FlashLoan.json';
 import CHAINLINK_PRICE_ORACLE_ABI from 'abis/ChainlinkPriceOracle.json';
 import ADDRESSES_PROVIDER_ABI from 'abis/AddressesProvider.json';
 
+NETWORKS.kovan.flashLoanAddress = process.env.KOVAN_FLASH_LOAN_CONTRACT_ADDRESS;
+NETWORKS.mainnet.flashLoanAddress =
+  process.env.MAINNET_FLASH_LOAN_CONTRACT_ADDRESS;
+
 const DEFAULT_NETWORK_ID = 1;
 
 const WALLETS = [
@@ -32,12 +36,6 @@ export function WalletProvider({ children }) {
   const [signer, setSigner] = React.useState(null);
   const [network, setNetwork] = React.useState('');
   const [lendingPoolAddress, setLendingPoolAddress] = React.useState(null);
-  const [wethGatewayAddress, setWETHGatewayAddress] = React.useState(null);
-  const [flashLoanAddress, setFlashLoanAddress] = React.useState(null);
-  const [
-    ChainLinkPriceOracleAddress,
-    setChainLinkPriceOracleAddress,
-  ] = React.useState(null);
 
   const cfg = React.useMemo(() => {
     if (!network) return {};
@@ -47,13 +45,13 @@ export function WalletProvider({ children }) {
   const addressesProviderContract = React.useMemo(
     () =>
       signer &&
-      cfg.addressesProvider &&
+      cfg.addressesProviderAddress &&
       new ethers.Contract(
-        cfg.addressesProvider,
+        cfg.addressesProviderAddress,
         ADDRESSES_PROVIDER_ABI,
         signer
       ),
-    [signer, cfg.addressesProvider]
+    [signer, cfg.addressesProviderAddress]
   );
 
   const lendingPoolContract = React.useMemo(
@@ -67,29 +65,29 @@ export function WalletProvider({ children }) {
   const wethGatewayContract = React.useMemo(
     () =>
       signer &&
-      wethGatewayAddress &&
-      new ethers.Contract(wethGatewayAddress, WETH_GATEWAY_ABI, signer),
-    [signer, wethGatewayAddress]
+      cfg.wethGatewayAddress &&
+      new ethers.Contract(cfg.wethGatewayAddress, WETH_GATEWAY_ABI, signer),
+    [signer, cfg.wethGatewayAddress]
   );
 
   const leverageContract = React.useMemo(
     () =>
       signer &&
-      flashLoanAddress &&
-      new ethers.Contract(flashLoanAddress, FLASH_LOAN_ABI, signer),
-    [signer, flashLoanAddress]
+      cfg.flashLoanAddress &&
+      new ethers.Contract(cfg.flashLoanAddress, FLASH_LOAN_ABI, signer),
+    [signer, cfg.flashLoanAddress]
   );
 
   const priceOracleContract = React.useMemo(
     () =>
       signer &&
-      ChainLinkPriceOracleAddress &&
+      cfg.chainLinkPriceOracleAddress &&
       new ethers.Contract(
-        ChainLinkPriceOracleAddress,
+        cfg.chainLinkPriceOracleAddress,
         CHAINLINK_PRICE_ORACLE_ABI,
         signer
       ),
-    [signer, ChainLinkPriceOracleAddress]
+    [signer, cfg.chainLinkPriceOracleAddress]
   );
 
   const connect = React.useCallback(
@@ -187,19 +185,16 @@ export function WalletProvider({ children }) {
   }, [connect]);
 
   React.useEffect(() => {
-    if (!(addressesProviderContract && cfg.wethGateway)) return;
+    if (!addressesProviderContract) return;
     let isMounted = true;
     (async () => {
       const _lendingPoolAddress = await addressesProviderContract.getLendingPool();
       if (isMounted) {
         setLendingPoolAddress(_lendingPoolAddress);
-        setWETHGatewayAddress(cfg.wethGateway);
-        setFlashLoanAddress(cfg.flashLoanAddress);
-        setChainLinkPriceOracleAddress(cfg.ChainLinkPriceOracleAddress);
       }
     })();
     return () => (isMounted = false);
-  }, [addressesProviderContract, cfg.wethGateway]);
+  }, [addressesProviderContract]);
 
   return (
     <WalletContext.Provider

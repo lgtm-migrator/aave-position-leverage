@@ -286,22 +286,29 @@ function Debt({ debt }) {
   const [isWorking, setIsWorking] = React.useState(false);
   const [leverage, setLeverage] = React.useState(2);
   const [slippage, setSlippage] = React.useState(2);
-  const { leverageContract, address } = useWallet();
+  const {
+    leverageContract,
+    address,
+    lendingPoolContract,
+    priceOracleContract,
+  } = useWallet();
 
   const applyLeverage = async () => {
     try {
       setIsWorking('Applying...');
       await tx('Applying...', 'Applied!', () =>
         leverageContract.letsdoit(
-          constructLoanParameters(
-            debt.collateral,
-            debt.collateralBalance,
-            debt.LTV / 10000,
-            debt.debtToken,
-            address,
+          constructLoanParameters({
+            collateralToken: debt.collateral,
+            collateralAmount: debt.collateralBalance,
+            collateralLTV: debt.LTV / 10000,
+            debtToken: debt.debtToken,
+            onbehalf: address,
             slippage,
-            ethers.BigNumber.from(leverage)
-          )
+            leverage: ethers.BigNumber.from(leverage),
+            lendingPoolContract,
+            priceOracleContract,
+          })
         )
       );
     } finally {
