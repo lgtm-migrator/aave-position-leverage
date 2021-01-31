@@ -20,7 +20,7 @@ import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
 import sleep from 'utils/sleep';
 import Loader from 'components/Loader';
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles(theme => ({
   container: {
     '& th, td': {
       borderColor: 'rgba(16, 161, 204, 0.2)',
@@ -42,7 +42,7 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-export default function () {
+export default function() {
   const classes = useStyles();
   const {
     connect,
@@ -186,7 +186,7 @@ export default function () {
     load();
     subscribe();
     return () => {
-      unsubs.forEach((unsub) => unsub());
+      unsubs.forEach(unsub => unsub());
     };
   }, [
     signer,
@@ -229,7 +229,7 @@ export default function () {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {deposits.map((deposit) => (
+                  {deposits.map(deposit => (
                     <Deposit key={deposit.key} {...{ deposit }} />
                   ))}
                 </TableBody>
@@ -251,7 +251,7 @@ export default function () {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {debts.map((debt) => (
+                  {debts.map(debt => (
                     <Debt key={debt.key} {...{ debt }} />
                   ))}
                 </TableBody>
@@ -285,6 +285,7 @@ function Debt({ debt }) {
   const { tx } = useNotifications();
   const [isWorking, setIsWorking] = React.useState(false);
   const [leverage, setLeverage] = React.useState(2);
+  const [slippage, setSlippage] = React.useState(2);
   const { leverageContract, address } = useWallet();
 
   const applyLeverage = async () => {
@@ -333,6 +334,18 @@ function Debt({ debt }) {
               className={classes.leverageSlider}
               disabled={!!isWorking}
               onChange={(event, leverage) => setLeverage(leverage)}
+            />
+            <Slider
+              value={slippage}
+              getAriaValueText={valueText}
+              aria-labelledby="leverage-slider"
+              valueLabelDisplay="auto"
+              step={1}
+              min={1}
+              max={10}
+              className={classes.leverageSlider}
+              disabled={!!isWorking}
+              onChange={(event, slippage) => setSlippage(slippage)}
             />
           </Box>
           <Button
