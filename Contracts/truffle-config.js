@@ -20,9 +20,6 @@
 
 const HDWalletProvider = require("@truffle/hdwallet-provider");
 require("dotenv").config({ path: ".env" });
-// const infuraKey = "fj4jll3k.....";
-//
-const fs = require("fs");
 const mnemonic = process.env.PRIVATE_KEY;
 
 module.exports = {

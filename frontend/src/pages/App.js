@@ -43,7 +43,7 @@ export default function App() {
           </Box>
         </Paper>
 
-        <WrongNetwork />
+        {<WrongNetwork />}
       </Router>
     </Box>
   );
