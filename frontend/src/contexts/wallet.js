@@ -187,7 +187,12 @@ export function WalletProvider({ children }) {
   }, [connect]);
 
   React.useEffect(() => {
-    if (!(addressesProviderContract && cfg.wethGateway)) return;
+    if (
+      !(addressesProviderContract && cfg.wethGateway,
+      cfg.flashLoanAddress,
+      cfg.ChainLinkPriceOracleAddress)
+    )
+      return;
     let isMounted = true;
     (async () => {
       const _lendingPoolAddress = await addressesProviderContract.getLendingPool();
@@ -199,7 +204,12 @@ export function WalletProvider({ children }) {
       }
     })();
     return () => (isMounted = false);
-  }, [addressesProviderContract, cfg.wethGateway]);
+  }, [
+    addressesProviderContract,
+    cfg.wethGateway,
+    cfg.flashLoanAddress,
+    cfg.ChainLinkPriceOracleAddress,
+  ]);
 
   return (
     <WalletContext.Provider

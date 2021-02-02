@@ -2,9 +2,8 @@ import NETWORKS from 'networks.json';
 import { ethers } from 'ethers';
 import { useWallet } from 'contexts/wallet';
 const axios = require('axios');
-const { lendingPoolContract, priceOracleContract } = useWallet();
 
-export async function constructLoanParameters(
+export async function ConstructLoanParameters(
   collateralToken,
   collateralAmount,
   collateralLTV,
@@ -14,15 +13,21 @@ export async function constructLoanParameters(
   leverage
 ) {
   /* Arguments Construction */
+  const {
+    lendingPoolContract,
+    leverageContract,
+    priceOracleContract,
+  } = useWallet();
+
   var loanTokenAddress = '0x6B175474E89094C44Da98b954EedeAC495271d0F';
 
   var CollateralInLoanToken =
-    priceOracleContract.getAssetPrice(collateralToken) /
+    priceOracleContract.getAssetPrice(collateralToken.address) /
     priceOracleContract.getAssetPrice(loanTokenAddress);
 
   var LoanTokenInDebt =
     priceOracleContract.getAssetPrice(loanTokenAddress) /
-    priceOracleContract.getAssetPrice(debtToken);
+    priceOracleContract.getAssetPrice(debtToken.address);
 
   var loanAmount = ethers.utils.parseEther(
     (collateralAmount * (leverage - 1) * CollateralInLoanToken).toString()
@@ -51,7 +56,7 @@ export async function constructLoanParameters(
       'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
         loanTokenAddress +
         '&toTokenAddress=' +
-        collateralToken +
+        collateralToken.address +
         '&amount=' +
         loanAmount +
         '&fromAddress=' +
@@ -65,15 +70,23 @@ export async function constructLoanParameters(
     })
     .catch(error => {});
 
+  const slippageAmount = (100 - slippage) / 100;
+
+  const SwapinCollateralToken = oneinchData.toTokenAmount * slippageAmount;
+
+  let loanAmountinDebt = loanAmount * LoanTokenInDebt;
+  let borrowAmount = loanAmountinDebt * collateralLTV * slippageAmount;
+  let userTransferAmount = (loanAmountinDebt - borrowAmount) * 1.05;
+  let totalDebt = userTransferAmount + borrowAmount;
+
   // Approval for SwapBack
-  let swapBackAmount = oneinchData.toTokenAmount * ((100 - slippage) / 100);
   var swapBackApprovalData = '';
   await axios
     .get(
       'https://api.1inch.exchange/v2.0/approve/calldata?amount=' +
-        swapBackAmount +
+        totalDebt +
         '&tokenAddress=' +
-        collateralToken
+        debtToken.address
     )
     .then(response => {
       swapBackApprovalData = response.data;
@@ -85,11 +98,11 @@ export async function constructLoanParameters(
   await axios
     .get(
       'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
-        collateralToken +
+        debtToken.address +
         '&toTokenAddress=' +
         loanTokenAddress +
         '&amount=' +
-        swapBackAmount +
+        totalDebt +
         '&fromAddress=' +
         FlashLoanContractAddress +
         '&slippage=' +
@@ -118,27 +131,34 @@ export async function constructLoanParameters(
       value: oneinchData.tx.value,
     },
     {
-      // Swap
       callName: 'Deposit',
       target: lendingPoolContract.address,
       data: lendingPoolContract.interface.functions.encode.deposit(
-        collateralToken,
-        swapBackAmount,
+        collateralToken.address,
+        SwapinCollateralToken,
         onbehalf,
         0
       ),
       value: 0,
     },
     {
-      // Swap
       callName: 'Borrow',
       target: lendingPoolContract.address,
       data: lendingPoolContract.interface.functions.encode.borrow(
-        debtToken,
-        loanAmount * LoanTokenInDebt,
+        debtToken.address,
+        borrowAmount,
         1,
         0,
         onbehalf
+      ),
+      value: 0,
+    },
+    {
+      callName: 'USER_Transfer',
+      target: debtToken.address,
+      data: debtToken.interface.functions.encode.transfer(
+        leverageContract.address,
+        userTransferAmount
       ),
       value: 0,
     },
@@ -158,5 +178,5 @@ export async function constructLoanParameters(
     },
   ];
   /* Transaction Build & Sign & Send */
-  return loanTokenAddress, loanAmount, operations;
+  return [loanTokenAddress, loanAmount, operations, userTransferAmount];
 }

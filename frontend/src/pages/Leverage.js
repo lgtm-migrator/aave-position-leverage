@@ -13,12 +13,13 @@ import {
   Slider,
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
-import { constructLoanParameters } from 'utils/takeloan';
+import { ConstructLoanParameters } from 'utils/takeloan';
 import { useWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
 import sleep from 'utils/sleep';
 import Loader from 'components/Loader';
+import ERC20_ABI from 'abis/ERC20.json';
 
 const useStyles = makeStyles(theme => ({
   container: {
@@ -122,9 +123,17 @@ export default function() {
             if (!isZero(currentVariableDebt)) {
               debts.push({
                 ...reserve,
-                collateral: reserve.aToken.underlyingAssetAddress,
+                collateral: new ethers.Contract(
+                  reserve.aToken.underlyingAssetAddress,
+                  ERC20_ABI,
+                  signer
+                ),
                 collateralBalance: currentATokenBalance,
-                debtToken: reserve.vToken.underlyingAssetAddress,
+                debtToken: new ethers.Contract(
+                  reserve.vToken.underlyingAssetAddress,
+                  ERC20_ABI,
+                  signer
+                ),
                 LTV: reserve.baseLTVasCollateral,
                 amount: currentVariableDebt,
                 variable: true,
@@ -134,10 +143,18 @@ export default function() {
             if (!isZero(currentStableDebt)) {
               debts.push({
                 ...reserve,
-                collateral: reserve.aToken.underlyingAssetAddress,
+                collateral: new ethers.Contract(
+                  reserve.aToken.underlyingAssetAddress,
+                  ERC20_ABI,
+                  signer
+                ),
                 collateralBalance: currentATokenBalance,
                 LTV: reserve.baseLTVasCollateral,
-                debtToken: reserve.sToken.underlyingAssetAddress,
+                debtToken: new ethers.Contract(
+                  reserve.sToken.underlyingAssetAddress,
+                  ERC20_ABI,
+                  signer
+                ),
                 amount: currentStableDebt,
                 variable: false,
                 key: `${reserve.id}-stable`,
@@ -288,21 +305,26 @@ function Debt({ debt }) {
   const [slippage, setSlippage] = React.useState(2);
   const { leverageContract, address } = useWallet();
 
+  var [
+    loanTokenAddress,
+    loanAmount,
+    operations,
+    userTransferAmount,
+  ] = ConstructLoanParameters(
+    debt.collateral,
+    debt.collateralBalance,
+    debt.LTV / 10000,
+    debt.debtToken,
+    address,
+    slippage,
+    ethers.BigNumber.from(leverage)
+  );
+
   const applyLeverage = async () => {
     try {
       setIsWorking('Applying...');
       await tx('Applying...', 'Applied!', () =>
-        leverageContract.letsdoit(
-          constructLoanParameters(
-            debt.collateral,
-            debt.collateralBalance,
-            debt.LTV / 10000,
-            debt.debtToken,
-            address,
-            slippage,
-            ethers.BigNumber.from(leverage)
-          )
-        )
+        leverageContract.letsdoit(loanTokenAddress, loanAmount, operations)
       );
     } finally {
       setIsWorking(false);
@@ -312,6 +334,50 @@ function Debt({ debt }) {
   function valueText(value) {
     return `${value}x`;
   }
+
+  const requiredUserTransfer = userTransferAmount;
+  const debtBalance = debt.debtToken.balanceOf(address);
+  const debtAllowance = debt.debtToken.allowance(
+    address,
+    leverageContract.address
+  );
+
+  let ApplyButton;
+  if (requiredUserTransfer > debtBalance)
+    ApplyButton = (
+      <Button
+        color="secondary"
+        variant="outlined"
+        disabled={true}
+        onClick={applyLeverage}
+      >
+        Insufficient Balance!
+      </Button>
+    );
+  else if (requiredUserTransfer < debtAllowance)
+    ApplyButton = (
+      <Button
+        color="secondary"
+        variant="outlined"
+        disabled={false}
+        onClick={() =>
+          debt.debtToken.approve(leverageContract.address, debtAllowance)
+        }
+      >
+        Unlock Debt Token
+      </Button>
+    );
+  else
+    ApplyButton = (
+      <Button
+        color="secondary"
+        variant="outlined"
+        disabled={false}
+        onClick={applyLeverage}
+      >
+        Apply Leverage
+      </Button>
+    );
 
   return (
     <TableRow>
@@ -348,14 +414,7 @@ function Debt({ debt }) {
               onChange={(event, slippage) => setSlippage(slippage)}
             />
           </Box>
-          <Button
-            color="secondary"
-            variant="outlined"
-            disabled={!!isWorking}
-            onClick={applyLeverage}
-          >
-            APPLY
-          </Button>
+          {ApplyButton}
         </Box>
       </TableCell>
     </TableRow>
