@@ -21,7 +21,7 @@ import sleep from 'utils/sleep';
 import Loader from 'components/Loader';
 import ERC20_ABI from 'abis/ERC20.json';
 import Select from 'react-select';
-import { DoLeverage } from 'utils/takeloan';
+import { LeverageButton } from 'utils/takeloan';
 
 const useStyles = makeStyles(theme => ({
   container: {
@@ -333,7 +333,7 @@ export default function() {
         collateralToken &&
         leverage &&
         slippage && (
-          <DoLeverage
+          <LeverageButton
             {...{
               vars: {
                 collateral: new ethers.Contract(
@@ -357,7 +357,7 @@ export default function() {
                 leverage: leverage,
               },
             }}
-          ></DoLeverage>
+          ></LeverageButton>
         )}
     </Box>
   );

@@ -7,12 +7,23 @@ import { Big } from 'utils/big-number';
 import React from 'react';
 const axios = require('axios');
 
-export async function DoLeverage({ vars }) {
+export function LeverageButton({ vars }) {
+  const [LevButton, setLevButton] = React.useState(
+    <p>Checking the Values...</p>
+  );
+
+  const btn = async () => setLevButton(await DoLeverage({ vars }));
+  btn();
+
+  return LevButton;
+}
+
+async function DoLeverage({ vars }) {
   const { tx } = useNotifications();
   const { leverageContract, address } = useWallet();
 
   var [
-    loanTokenAddress,
+    collateralToken,
     loanAmount,
     operations,
     userTransferAmount,
@@ -27,16 +38,23 @@ export async function DoLeverage({ vars }) {
   );
   const applyLeverage = async () => {
     try {
-      await tx('Applying...', 'Applied!', () =>
-        leverageContract.letsdoit(loanTokenAddress, loanAmount, operations)
+      await tx(
+        'Applying...',
+        'Applied!',
+        async () =>
+          await leverageContract.letsdoit(
+            vars.collateral.address,
+            loanAmount,
+            operations
+          )
       );
     } finally {
     }
   };
 
   const requiredUserTransfer = userTransferAmount;
-  const debtBalance = vars.debtToken.balanceOf(address);
-  const debtAllowance = vars.debtToken.allowance(
+  const debtBalance = await vars.collateral.balanceOf(address);
+  const debtAllowance = await vars.collateral.allowance(
     address,
     leverageContract.address
   );
@@ -44,18 +62,27 @@ export async function DoLeverage({ vars }) {
   let ApplyButton;
   if (requiredUserTransfer > debtBalance)
     ApplyButton = (
-      <Button color="secondary" variant="outlined" disabled={true}>
+      <Button
+        style={{ position: 'relative', top: 20 }}
+        color="secondary"
+        variant="outlined"
+        disabled={true}
+      >
         Insufficient Balance!
       </Button>
     );
   else if (requiredUserTransfer < debtAllowance)
     ApplyButton = (
       <Button
+        style={{ position: 'relative', top: 20 }}
         color="secondary"
         variant="outlined"
         disabled={false}
         onClick={async () =>
-          await vars.debtToken.approve(leverageContract.address, debtAllowance)
+          await vars.collateralToken.approve(
+            leverageContract.address,
+            debtAllowance
+          )
         }
       >
         Unlock Debt Token
@@ -64,6 +91,7 @@ export async function DoLeverage({ vars }) {
   else
     ApplyButton = (
       <Button
+        style={{ position: 'relative', top: 20 }}
         color="secondary"
         variant="outlined"
         disabled={false}
@@ -73,7 +101,7 @@ export async function DoLeverage({ vars }) {
       </Button>
     );
 
-  return <ApplyButton></ApplyButton>;
+  return ApplyButton;
 }
 
 async function ConstructLoanParameters(
@@ -92,38 +120,32 @@ async function ConstructLoanParameters(
     priceOracleContract,
   } = useWallet();
 
-  var loanTokenAddress = collateralToken.address;
-
-  var CollateralInLoanToken =
-    (await priceOracleContract.getAssetPrice(collateralToken.address)) /
-    (await priceOracleContract.getAssetPrice(loanTokenAddress));
-
   var LoanTokenInDebt =
-    (await priceOracleContract.getAssetPrice(loanTokenAddress)) /
+    (await priceOracleContract.getAssetPrice(collateralToken.address)) /
     (await priceOracleContract.getAssetPrice(debtToken.address));
-
-  var loanAmount = ethers.utils.parseEther(
-    (collateralAmount * (leverage - 1) * CollateralInLoanToken).toString()
-  );
 
   var FlashLoanContractAddress = NETWORKS.mainnet.flashLoanAddress;
 
   const slippageAmount = (100 - slippage) / 100;
 
-  let loanAmountinDebt = loanAmount * LoanTokenInDebt;
+  var loanAmount = collateralAmount * leverage;
 
-  let borrowAmount = loanAmountinDebt * collateralLTV * slippageAmount;
+  let borrowAmount = ethers.utils.parseEther(
+    (loanAmount * LoanTokenInDebt * collateralLTV * slippageAmount).toFixed(6)
+  );
 
-  let userTransferAmount = loanAmountinDebt - borrowAmount;
+  let userTransferAmount = ethers.utils.parseEther(
+    (loanAmount - loanAmount * collateralLTV * slippageAmount).toFixed(6)
+  );
 
-  let totalDebt = userTransferAmount + borrowAmount;
+  loanAmount = ethers.utils.parseEther(loanAmount.toFixed(6));
 
   // Approval for SwapBack
   var swapBackApprovalData = '';
   await axios
     .get(
       'https://api.1inch.exchange/v2.0/approve/calldata?amount=' +
-        totalDebt +
+        borrowAmount +
         '&tokenAddress=' +
         debtToken.address
     )
@@ -139,9 +161,9 @@ async function ConstructLoanParameters(
       'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
         debtToken.address +
         '&toTokenAddress=' +
-        loanTokenAddress +
+        collateralToken.address +
         '&amount=' +
-        totalDebt +
+        borrowAmount +
         '&fromAddress=' +
         FlashLoanContractAddress +
         '&slippage=' +
@@ -153,8 +175,6 @@ async function ConstructLoanParameters(
     })
     .catch(error => {});
 
-  const x = ethers.BigNumber.from(10);
-
   // Operations
   var operations = [
     {
@@ -162,7 +182,7 @@ async function ConstructLoanParameters(
       target: lendingPoolContract.address,
       data: lendingPoolContract.interface.encodeFunctionData('deposit', [
         collateralToken.address,
-        ethers.BigNumber.from(loanAmount / 10 ** 16).mul(10 ** 16),
+        loanAmount,
         onbehalf,
         0,
       ]),
@@ -173,7 +193,7 @@ async function ConstructLoanParameters(
       target: lendingPoolContract.address,
       data: lendingPoolContract.interface.encodeFunctionData('borrow', [
         debtToken.address,
-        ethers.BigNumber.from(borrowAmount / 10 ** 16).mul(10 ** 16),
+        borrowAmount,
         1,
         0,
         onbehalf,
@@ -183,9 +203,9 @@ async function ConstructLoanParameters(
     {
       callName: 'USER_Transfer',
       target: debtToken.address,
-      data: lendingPoolContract.interface.encodeFunctionData('transfer', [
+      data: collateralToken.interface.encodeFunctionData('transfer', [
         leverageContract.address,
-        ethers.BigNumber.from(userTransferAmount / 10 ** 16).mul(10 ** 16),
+        userTransferAmount,
       ]),
       value: 0,
     },
@@ -205,7 +225,5 @@ async function ConstructLoanParameters(
     },
   ];
   /* Transaction Build & Sign & Send */
-  debugger;
-  alert(loanTokenAddress, loanAmount, operations, userTransferAmount);
-  return [loanTokenAddress, loanAmount, operations, userTransferAmount];
+  return [collateralToken.address, loanAmount, operations, userTransferAmount];
 }

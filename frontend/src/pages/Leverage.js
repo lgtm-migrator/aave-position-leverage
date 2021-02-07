@@ -13,7 +13,7 @@ import {
   Slider,
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
-import { DoLeverage } from 'utils/takeloan';
+import { LeverageButton } from 'utils/takeloan';
 import { useWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
@@ -343,7 +343,7 @@ function Debt({ debt }) {
               onChange={(event, slippage) => setSlippage(slippage)}
             />
           </Box>
-          <DoLeverage {...{ vars: debt }}></DoLeverage>
+          <LeverageButton {...{ vars: debt }}></LeverageButton>
         </Box>
       </TableCell>
     </TableRow>
