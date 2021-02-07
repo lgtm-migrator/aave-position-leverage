@@ -1,4 +1,5 @@
 import NETWORKS from 'networks.json';
+import STABLE_DEBT_ABI from 'abis/StableDebtToken.json';
 import { ethers } from 'ethers';
 import { UseWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
@@ -24,27 +25,35 @@ async function DoLeverage({ vars }) {
     lendingPoolContract,
     leverageContract,
     priceOracleContract,
+    dataProviderContract,
     address,
+    signer,
   } = UseWallet();
 
   let collateralLTV = vars.LTV / 10000;
   const slippageAmount = (100 - vars.slippage) / 100;
 
-  var LoanTokenInDebt =
-    (await priceOracleContract.getAssetPrice(vars.collateral.address)) /
-    (await priceOracleContract.getAssetPrice(vars.debtToken.address));
+  var LoanTokenInDebt;
+  if (vars.collateral.address == '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2')
+    LoanTokenInDebt =
+      10 ** 18 /
+      (await priceOracleContract.getAssetPrice(vars.debtToken.address));
+  else
+    LoanTokenInDebt =
+      (await priceOracleContract.getAssetPrice(vars.collateral.address)) /
+      (await priceOracleContract.getAssetPrice(vars.debtToken.address));
 
-  var loanAmount =
-    vars.collateralBalance * vars.leverage.toString() * (10 ** 18).toString();
+  var loanAmount = (vars.collateralBalance * vars.leverage).toString();
 
-  var borrowAmount =
-    loanAmount *
-    LoanTokenInDebt.toString() *
-    collateralLTV.toString() *
-    slippageAmount.toString();
+  var borrowAmount = ethers.utils.parseEther(
+    (loanAmount * LoanTokenInDebt * collateralLTV * slippageAmount).toString()
+  );
 
-  var userTransferAmount =
-    loanAmount - loanAmount * (collateralLTV * slippageAmount).toString();
+  var userTransferAmount = ethers.utils.parseEther(
+    (loanAmount - loanAmount * collateralLTV * slippageAmount).toString()
+  );
+
+  loanAmount = ethers.utils.parseEther(loanAmount);
 
   var operations = async () =>
     await ConstructOperations(
@@ -77,15 +86,25 @@ async function DoLeverage({ vars }) {
     }
   };
 
-  const requiredUserTransfer = userTransferAmount;
-  const debtBalance = await vars.collateral.balanceOf(address);
-  const debtAllowance = await vars.collateral.allowance(
+  var collateralBalance = await vars.collateral.balanceOf(address);
+  var collateralAllowance = await vars.collateral.allowance(
+    address,
+    leverageContract.address
+  );
+  var stableDebtToken = new ethers.Contract(
+    await dataProviderContract.getReserveTokensAddresses(debtToken)[1],
+    STABLE_DEBT_ABI,
+    signer
+  );
+  var borrowAllowance = stableDebtToken.borrowAllowance(
     address,
     leverageContract.address
   );
 
+  //alert(collateralAllowance);
+
   let ApplyButton;
-  if (requiredUserTransfer > debtBalance)
+  if (userTransferAmount.gte(collateralBalance))
     ApplyButton = (
       <Button
         style={{ position: 'relative', top: 20 }}
@@ -96,7 +115,7 @@ async function DoLeverage({ vars }) {
         Insufficient Balance!
       </Button>
     );
-  else if (requiredUserTransfer < debtAllowance)
+  else if (userTransferAmount.gt(collateralAllowance))
     ApplyButton = (
       <Button
         style={{ position: 'relative', top: 20 }}
@@ -104,13 +123,30 @@ async function DoLeverage({ vars }) {
         variant="outlined"
         disabled={false}
         onClick={async () =>
-          await vars.collateralToken.approve(
+          await vars.collateral.approve(
             leverageContract.address,
-            debtAllowance
+            userTransferAmount
           )
         }
       >
-        Unlock Debt Token
+        Unlock Collateral Token
+      </Button>
+    );
+  else if (borrowAmount.gt(borrowAllowance))
+    ApplyButton = (
+      <Button
+        style={{ position: 'relative', top: 20 }}
+        color="secondary"
+        variant="outlined"
+        disabled={false}
+        onClick={async () =>
+          await stableDebtToken.approveDelegation(
+            leverageContract.address,
+            borrowAmount
+          )
+        }
+      >
+        Approve Delegation
       </Button>
     );
   else
@@ -141,6 +177,8 @@ async function ConstructOperations(
 ) {
   /* Arguments Construction */
   var FlashLoanContractAddress = NETWORKS.mainnet.flashLoanAddress;
+
+  console.log(borrowAmount);
 
   // Approval for SwapBack
   var swapBackApprovalData = '';
@@ -193,6 +231,15 @@ async function ConstructOperations(
   // Operations
   var operations = [
     {
+      callName: 'LendingPool_APPROVE',
+      target: collateralToken.address,
+      data: collateralToken.interface.encodeFunctionData('approve', [
+        Contracts.lendingPoolContract.address,
+        loanAmount,
+      ]),
+      value: 0,
+    },
+    {
       callName: 'Deposit',
       target: Contracts.lendingPoolContract.address,
       data: Contracts.lendingPoolContract.interface.encodeFunctionData(
@@ -206,14 +253,15 @@ async function ConstructOperations(
       target: Contracts.lendingPoolContract.address,
       data: Contracts.lendingPoolContract.interface.encodeFunctionData(
         'borrow',
-        [debtToken.address, borrowAmount, 1, 0, onbehalf]
+        [collateralToken.address, borrowAmount, 1, 0, onbehalf]
       ),
       value: 0,
     },
     {
       callName: 'USER_Transfer',
       target: debtToken.address,
-      data: collateralToken.interface.encodeFunctionData('transfer', [
+      data: collateralToken.interface.encodeFunctionData('transferFrom', [
+        onbehalf,
         Contracts.leverageContract.address,
         userTransferAmount,
       ]),

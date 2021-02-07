@@ -1,6 +1,7 @@
 {
   "mainnet": {
     "addressesProvider": "0xB53C1a33016B2DC2fF3653530bfF1848a515c8c5",
+    "DataProvider": "0x057835Ad21a177dbdd3090bB1CAE03EaCF78Fc6d",
     "wethGateway": "0xDcD33426BA191383f1c9B431A342498fdac73488",
     "flashLoanAddress": "0x958Eb4058a813daC20d875d3990cbb044B826ED8",
     "ChainLinkPriceOracleAddress": "0x76B47460d7F7c5222cFb6b6A75615ab10895DDe4",

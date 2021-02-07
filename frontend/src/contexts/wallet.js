@@ -7,6 +7,7 @@ import cache from 'utils/cache';
 import NETWORKS from 'networks.json';
 import LENDING_POOL_ABI from 'abis/LendingPool.json';
 import WETH_GATEWAY_ABI from 'abis/WETHGateway.json';
+import DATA_PROVIDER_ABI from 'abis/DataProvider.json';
 import FLASH_LOAN_ABI from 'abis/FlashLoan.json';
 import CHAINLINK_PRICE_ORACLE_ABI from 'abis/ChainlinkPriceOracle.json';
 import ADDRESSES_PROVIDER_ABI from 'abis/AddressesProvider.json';
@@ -33,6 +34,7 @@ export function WalletProvider({ children }) {
   const [network, setNetwork] = React.useState('');
   const [lendingPoolAddress, setLendingPoolAddress] = React.useState(null);
   const [wethGatewayAddress, setWETHGatewayAddress] = React.useState(null);
+  const [DataProviderAddress, setDataProviderAddress] = React.useState(null);
   const [flashLoanAddress, setFlashLoanAddress] = React.useState(null);
   const [
     ChainLinkPriceOracleAddress,
@@ -70,6 +72,14 @@ export function WalletProvider({ children }) {
       wethGatewayAddress &&
       new ethers.Contract(wethGatewayAddress, WETH_GATEWAY_ABI, signer),
     [signer, wethGatewayAddress]
+  );
+
+  const dataProviderContract = React.useMemo(
+    () =>
+      signer &&
+      DataProviderAddress &&
+      new ethers.Contract(DataProviderAddress, DATA_PROVIDER_ABI, signer),
+    [signer, DataProviderAddress]
   );
 
   const leverageContract = React.useMemo(
@@ -188,9 +198,12 @@ export function WalletProvider({ children }) {
 
   React.useEffect(() => {
     if (
-      !(addressesProviderContract && cfg.wethGateway,
-      cfg.flashLoanAddress,
-      cfg.ChainLinkPriceOracleAddress)
+      !(
+        addressesProviderContract &&
+        cfg.wethGateway &&
+        cfg.flashLoanAddress &&
+        cfg.ChainLinkPriceOracleAddress & cfg.DataProvider
+      )
     )
       return;
     let isMounted = true;
@@ -201,6 +214,7 @@ export function WalletProvider({ children }) {
         setWETHGatewayAddress(cfg.wethGateway);
         setFlashLoanAddress(cfg.flashLoanAddress);
         setChainLinkPriceOracleAddress(cfg.ChainLinkPriceOracleAddress);
+        setDataProviderAddress(cfg.DataProvider);
       }
     })();
     return () => (isMounted = false);
@@ -208,6 +222,7 @@ export function WalletProvider({ children }) {
     addressesProviderContract,
     cfg.wethGateway,
     cfg.flashLoanAddress,
+    cfg.DataProvider,
     cfg.ChainLinkPriceOracleAddress,
   ]);
 
@@ -223,6 +238,7 @@ export function WalletProvider({ children }) {
         signer,
         lendingPoolContract,
         wethGatewayContract,
+        dataProviderContract,
         leverageContract,
         priceOracleContract,
         subgraph,
@@ -248,6 +264,7 @@ export function UseWallet() {
     signer,
     lendingPoolContract,
     wethGatewayContract,
+    dataProviderContract,
     leverageContract,
     priceOracleContract,
     subgraph,
@@ -264,6 +281,7 @@ export function UseWallet() {
     availableNetworkNames: Object.keys(NETWORKS),
     lendingPoolContract,
     wethGatewayContract,
+    dataProviderContract,
     leverageContract,
     priceOracleContract,
     subgraph,
