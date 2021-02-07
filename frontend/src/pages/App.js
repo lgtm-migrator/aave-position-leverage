@@ -8,6 +8,7 @@ import { useWallet } from 'contexts/wallet';
 import Loader from 'components/Loader';
 import Header from './Header';
 import Leverage from './Leverage';
+import NewLoan from './newLoan';
 import WrongNetwork from './WrongNetwork';
 
 const useStyles = makeStyles(theme => ({
@@ -15,6 +16,20 @@ const useStyles = makeStyles(theme => ({
     width: '960px',
     margin: '0 auto',
     padding: '100px 0 30px',
+    right: '-300px',
+    position: 'relative',
+    [theme.breakpoints.down('sm')]: {
+      padding: '70px 0 10px',
+      width: 'auto',
+    },
+  },
+  newLoanContainer: {
+    width: '500px',
+    height: '500px',
+    top: -180,
+    left: -600,
+    margin: '0 auto',
+    padding: '0px 0 30px',
     position: 'relative',
     [theme.breakpoints.down('sm')]: {
       padding: '70px 0 10px',
@@ -27,22 +42,34 @@ export default function App() {
   const classes = useStyles();
   const { isLoaded: walletIsLoaded } = useWallet();
   return (
-    <Box className={clsx(classes.container)}>
+    <Box>
       <Router basename={ROUTER_BASE_NAME}>
-        <Header />
+        <Box className={clsx(classes.container)}>
+          <Header />
 
-        <Paper>
+          <Paper>
+            <Box p={4}>
+              {!walletIsLoaded ? (
+                <Box pt={20}>
+                  <Loader />
+                </Box>
+              ) : (
+                <Leverage />
+              )}
+            </Box>
+          </Paper>
+        </Box>
+        <Paper className={clsx(classes.newLoanContainer)}>
           <Box p={4}>
             {!walletIsLoaded ? (
               <Box pt={20}>
                 <Loader />
               </Box>
             ) : (
-              <Leverage />
+              <NewLoan />
             )}
           </Box>
         </Paper>
-
         {<WrongNetwork />}
       </Router>
     </Box>

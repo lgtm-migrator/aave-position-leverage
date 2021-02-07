@@ -30,7 +30,15 @@ export default function Component() {
       <Toolbar color="inherit">
         <Typography variant="h6" className={'flex flex-grow'}>
           <Box className={clsx('flex flex-col')}>
-            <div>{APP_TITLE}</div>
+            <div>
+              {' '}
+              <img
+                src="https://pbs.twimg.com/profile_images/1186270065085370368/J1YJtvdI_400x400.jpg"
+                height="50"
+                width="50"
+              />{' '}
+              <span className={classes.account}>{APP_TITLE}</span>
+            </div>
           </Box>
         </Typography>
 

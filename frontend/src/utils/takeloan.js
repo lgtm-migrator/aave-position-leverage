@@ -1,9 +1,82 @@
 import NETWORKS from 'networks.json';
 import { ethers } from 'ethers';
 import { useWallet } from 'contexts/wallet';
+import { useNotifications } from 'contexts/notifications';
+import { Button } from '@material-ui/core';
+import { Big } from 'utils/big-number';
+import React from 'react';
 const axios = require('axios');
 
-export async function ConstructLoanParameters(
+export async function DoLeverage({ vars }) {
+  const { tx } = useNotifications();
+  const { leverageContract, address } = useWallet();
+
+  var [
+    loanTokenAddress,
+    loanAmount,
+    operations,
+    userTransferAmount,
+  ] = await ConstructLoanParameters(
+    vars.collateral,
+    vars.collateralBalance,
+    vars.LTV / 10000,
+    vars.debtToken,
+    address,
+    vars.slippage,
+    vars.leverage
+  );
+  const applyLeverage = async () => {
+    try {
+      await tx('Applying...', 'Applied!', () =>
+        leverageContract.letsdoit(loanTokenAddress, loanAmount, operations)
+      );
+    } finally {
+    }
+  };
+
+  const requiredUserTransfer = userTransferAmount;
+  const debtBalance = vars.debtToken.balanceOf(address);
+  const debtAllowance = vars.debtToken.allowance(
+    address,
+    leverageContract.address
+  );
+
+  let ApplyButton;
+  if (requiredUserTransfer > debtBalance)
+    ApplyButton = (
+      <Button color="secondary" variant="outlined" disabled={true}>
+        Insufficient Balance!
+      </Button>
+    );
+  else if (requiredUserTransfer < debtAllowance)
+    ApplyButton = (
+      <Button
+        color="secondary"
+        variant="outlined"
+        disabled={false}
+        onClick={async () =>
+          await vars.debtToken.approve(leverageContract.address, debtAllowance)
+        }
+      >
+        Unlock Debt Token
+      </Button>
+    );
+  else
+    ApplyButton = (
+      <Button
+        color="secondary"
+        variant="outlined"
+        disabled={false}
+        onClick={() => applyLeverage()}
+      >
+        Apply Leverage
+      </Button>
+    );
+
+  return <ApplyButton></ApplyButton>;
+}
+
+async function ConstructLoanParameters(
   collateralToken,
   collateralAmount,
   collateralLTV,
@@ -19,64 +92,30 @@ export async function ConstructLoanParameters(
     priceOracleContract,
   } = useWallet();
 
-  var loanTokenAddress = '0x6B175474E89094C44Da98b954EedeAC495271d0F';
+  var loanTokenAddress = collateralToken.address;
 
   var CollateralInLoanToken =
-    priceOracleContract.getAssetPrice(collateralToken.address) /
-    priceOracleContract.getAssetPrice(loanTokenAddress);
+    (await priceOracleContract.getAssetPrice(collateralToken.address)) /
+    (await priceOracleContract.getAssetPrice(loanTokenAddress));
 
   var LoanTokenInDebt =
-    priceOracleContract.getAssetPrice(loanTokenAddress) /
-    priceOracleContract.getAssetPrice(debtToken.address);
+    (await priceOracleContract.getAssetPrice(loanTokenAddress)) /
+    (await priceOracleContract.getAssetPrice(debtToken.address));
 
   var loanAmount = ethers.utils.parseEther(
     (collateralAmount * (leverage - 1) * CollateralInLoanToken).toString()
   );
 
-  var FlashLoanContractAddress = NETWORKS['flashLoanAddress'];
-
-  // Approval for Swap
-  var swapApprovalData = '';
-  await axios
-    .get(
-      'https://api.1inch.exchange/v2.0/approve/calldata?amount=' +
-        loanAmount +
-        '&tokenAddress=' +
-        loanTokenAddress
-    )
-    .then(response => {
-      swapApprovalData = response.data;
-    })
-    .catch(error => {});
-
-  // 1Inch Swap
-  var oneinchData = '';
-  await axios
-    .get(
-      'https://api.1inch.exchange/v2.0/swap?fromTokenAddress=' +
-        loanTokenAddress +
-        '&toTokenAddress=' +
-        collateralToken.address +
-        '&amount=' +
-        loanAmount +
-        '&fromAddress=' +
-        FlashLoanContractAddress +
-        '&slippage=' +
-        slippage +
-        '&disableEstimate=true'
-    )
-    .then(response => {
-      oneinchData = response.data;
-    })
-    .catch(error => {});
+  var FlashLoanContractAddress = NETWORKS.mainnet.flashLoanAddress;
 
   const slippageAmount = (100 - slippage) / 100;
 
-  const SwapinCollateralToken = oneinchData.toTokenAmount * slippageAmount;
-
   let loanAmountinDebt = loanAmount * LoanTokenInDebt;
+
   let borrowAmount = loanAmountinDebt * collateralLTV * slippageAmount;
-  let userTransferAmount = (loanAmountinDebt - borrowAmount) * 1.05;
+
+  let userTransferAmount = loanAmountinDebt - borrowAmount;
+
   let totalDebt = userTransferAmount + borrowAmount;
 
   // Approval for SwapBack
@@ -114,52 +153,40 @@ export async function ConstructLoanParameters(
     })
     .catch(error => {});
 
+  const x = ethers.BigNumber.from(10);
+
   // Operations
   var operations = [
     {
-      // Approval for Swap
-      callName: 'Approval_TO_TARGET',
-      target: swapApprovalData.to,
-      data: swapApprovalData.data,
-      value: 0,
-    },
-    {
-      // Swap
-      callName: 'SWAP_TO_TARGET',
-      target: oneinchData.tx.to,
-      data: oneinchData.tx.data,
-      value: oneinchData.tx.value,
-    },
-    {
       callName: 'Deposit',
       target: lendingPoolContract.address,
-      data: lendingPoolContract.interface.functions.encode.deposit(
+      data: lendingPoolContract.interface.encodeFunctionData('deposit', [
         collateralToken.address,
-        SwapinCollateralToken,
+        ethers.BigNumber.from(loanAmount / 10 ** 16).mul(10 ** 16),
         onbehalf,
-        0
-      ),
+        0,
+      ]),
       value: 0,
     },
     {
       callName: 'Borrow',
       target: lendingPoolContract.address,
-      data: lendingPoolContract.interface.functions.encode.borrow(
+      data: lendingPoolContract.interface.encodeFunctionData('borrow', [
         debtToken.address,
-        borrowAmount,
+        ethers.BigNumber.from(borrowAmount / 10 ** 16).mul(10 ** 16),
         1,
         0,
-        onbehalf
-      ),
+        onbehalf,
+      ]),
       value: 0,
     },
     {
       callName: 'USER_Transfer',
       target: debtToken.address,
-      data: debtToken.interface.functions.encode.transfer(
+      data: lendingPoolContract.interface.encodeFunctionData('transfer', [
         leverageContract.address,
-        userTransferAmount
-      ),
+        ethers.BigNumber.from(userTransferAmount / 10 ** 16).mul(10 ** 16),
+      ]),
       value: 0,
     },
     {
@@ -174,9 +201,11 @@ export async function ConstructLoanParameters(
       callName: 'SWAP_BACK',
       target: oneinchSwapBackData.tx.to,
       data: oneinchSwapBackData.tx.data,
-      value: oneinchSwapBackData.tx.value,
+      value: 0,
     },
   ];
   /* Transaction Build & Sign & Send */
+  debugger;
+  alert(loanTokenAddress, loanAmount, operations, userTransferAmount);
   return [loanTokenAddress, loanAmount, operations, userTransferAmount];
 }

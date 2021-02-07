@@ -5,19 +5,20 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Launch Chrome",
+      "request": "launch",
+      "type": "pwa-chrome",
+      "url": "http://localhost:5555",
+      "runtimeExecutable": "/usr/bin/chromium",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
       "name": "Launch via NPM",
       "request": "launch",
       "runtimeArgs": ["start"],
       "runtimeExecutable": "npm",
       "skipFiles": ["<node_internals>/**"],
       "type": "pwa-node"
-    },
-    {
-      "type": "pwa-node",
-      "request": "launch",
-      "name": "Launch Program",
-      "skipFiles": ["<node_internals>/**"],
-      "program": "${file}"
     }
   ]
 }

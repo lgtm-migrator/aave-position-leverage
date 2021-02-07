@@ -13,7 +13,7 @@ import {
   Slider,
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
-import { ConstructLoanParameters } from 'utils/takeloan';
+import { DoLeverage } from 'utils/takeloan';
 import { useWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
@@ -231,49 +231,51 @@ export default function() {
       ) : !isLoaded ? (
         <Loader />
       ) : (
-        <Box className={classes.grid}>
-          <Box>
-            <h2>Your Deposits</h2>
-            {!deposits.length ? (
-              <Box>You have no deposits.</Box>
-            ) : (
-              <Table className={classes.table} aria-label="deposit">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Asset</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {deposits.map(deposit => (
-                    <Deposit key={deposit.key} {...{ deposit }} />
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Box>
-          <Box>
-            <h2>Your Debts</h2>
-            {!debts.length ? (
-              <Box>You have no debts.</Box>
-            ) : (
-              <Table className={classes.table} aria-label="debts">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Asset</TableCell>
-                    <TableCell>Amount</TableCell>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Lever Up</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {debts.map(debt => (
-                    <Debt key={debt.key} {...{ debt }} />
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+        <Box>
+          <Box className={classes.grid}>
+            <Box>
+              <h2>Your Deposits</h2>
+              {!deposits.length ? (
+                <Box>You have no deposits.</Box>
+              ) : (
+                <Table className={classes.table} aria-label="deposit">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Asset</TableCell>
+                      <TableCell>Amount</TableCell>
+                      <TableCell></TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {deposits.map(deposit => (
+                      <Deposit key={deposit.key} {...{ deposit }} />
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </Box>
+            <Box>
+              <h2>Your Debts</h2>
+              {!debts.length ? (
+                <Box>You have no debts.</Box>
+              ) : (
+                <Table className={classes.table} aria-label="debts">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Asset</TableCell>
+                      <TableCell>Amount</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Lever Up</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {debts.map(debt => (
+                      <Debt key={debt.key} {...{ debt }} />
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </Box>
           </Box>
         </Box>
       )}
@@ -300,84 +302,13 @@ function Deposit({ deposit }) {
 function Debt({ debt }) {
   const classes = useStyles();
   const { tx } = useNotifications();
-  const [isWorking, setIsWorking] = React.useState(false);
   const [leverage, setLeverage] = React.useState(2);
   const [slippage, setSlippage] = React.useState(2);
-  const { leverageContract, address } = useWallet();
-
-  var [
-    loanTokenAddress,
-    loanAmount,
-    operations,
-    userTransferAmount,
-  ] = ConstructLoanParameters(
-    debt.collateral,
-    debt.collateralBalance,
-    debt.LTV / 10000,
-    debt.debtToken,
-    address,
-    slippage,
-    ethers.BigNumber.from(leverage)
-  );
-
-  const applyLeverage = async () => {
-    try {
-      setIsWorking('Applying...');
-      await tx('Applying...', 'Applied!', () =>
-        leverageContract.letsdoit(loanTokenAddress, loanAmount, operations)
-      );
-    } finally {
-      setIsWorking(false);
-    }
-  };
+  const { address } = useWallet();
 
   function valueText(value) {
     return `${value}x`;
   }
-
-  const requiredUserTransfer = userTransferAmount;
-  const debtBalance = debt.debtToken.balanceOf(address);
-  const debtAllowance = debt.debtToken.allowance(
-    address,
-    leverageContract.address
-  );
-
-  let ApplyButton;
-  if (requiredUserTransfer > debtBalance)
-    ApplyButton = (
-      <Button
-        color="secondary"
-        variant="outlined"
-        disabled={true}
-        onClick={applyLeverage}
-      >
-        Insufficient Balance!
-      </Button>
-    );
-  else if (requiredUserTransfer < debtAllowance)
-    ApplyButton = (
-      <Button
-        color="secondary"
-        variant="outlined"
-        disabled={false}
-        onClick={() =>
-          debt.debtToken.approve(leverageContract.address, debtAllowance)
-        }
-      >
-        Unlock Debt Token
-      </Button>
-    );
-  else
-    ApplyButton = (
-      <Button
-        color="secondary"
-        variant="outlined"
-        disabled={false}
-        onClick={applyLeverage}
-      >
-        Apply Leverage
-      </Button>
-    );
 
   return (
     <TableRow>
@@ -398,7 +329,6 @@ function Debt({ debt }) {
               min={1}
               max={3}
               className={classes.leverageSlider}
-              disabled={!!isWorking}
               onChange={(event, leverage) => setLeverage(leverage)}
             />
             <Slider
@@ -410,11 +340,10 @@ function Debt({ debt }) {
               min={1}
               max={10}
               className={classes.leverageSlider}
-              disabled={!!isWorking}
               onChange={(event, slippage) => setSlippage(slippage)}
             />
           </Box>
-          {ApplyButton}
+          <DoLeverage {...{ vars: debt }}></DoLeverage>
         </Box>
       </TableCell>
     </TableRow>

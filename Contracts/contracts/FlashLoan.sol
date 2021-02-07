@@ -15,6 +15,9 @@ import "./utils/DirectCall.sol";
 
 contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
     struct LoanData {
+        address LoanTaker;
+        address LoanToken;
+        uint256 LoanAmount;
         callStruct[] postLoanActions;
     }
 
@@ -46,13 +49,15 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
 
     // This is the function that will be called postLoan
     // i.e. Encode the logic to handle your flashloaned funds here
+    address LendingPoolContract = 0x7d2768dE32b0b80b7a3454c06BdAc94A69DDc7A9;
+
     function executeOperation(
         address _reserve,
         uint256 _amount,
         uint256 _fee,
         bytes calldata _params
     ) external override {
-        //require(msg.sender == SoloAddress, "Unauthorized Access!");
+        require(msg.sender == LendingPoolContract, "Unauthorized Access!");
         require(
             _amount <= getBalanceInternal(address(this), _reserve),
             "Invalid balance, was the flashLoan successful?"
@@ -75,7 +80,12 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
 
         transferFundsBackToPoolInternal(_reserve, totalDebt);
 
-        emit loanExecutionSuccess(msg.sender);
+        emit loanExecutionSuccess(myLoanData.LoanTaker);
+
+        IERC20(myLoanData.LoanToken).transfer(
+            myLoanData.LoanTaker,
+            IERC20(myLoanData.LoanToken).balanceOf(address(this))
+        );
     }
 
     function initiateFlashLoan(
@@ -89,7 +99,14 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
             address(this),
             _Loantoken,
             _amount,
-            abi.encode(LoanData({postLoanActions: postLoanActions}))
+            abi.encode(
+                LoanData({
+                    LoanTaker: msg.sender,
+                    LoanToken: _Loantoken,
+                    LoanAmount: _amount,
+                    postLoanActions: postLoanActions
+                })
+            )
         );
     }
 
@@ -103,13 +120,5 @@ contract FlashLoan is DirectCall, Ownable, FlashLoanReceiverBase {
 
     function changeOwner(address newOwner) external onlyOwner {
         transferOwnership(newOwner);
-    }
-
-    function withdraweth(uint256 _Amount) external onlyOwner {
-        msg.sender.transfer(_Amount);
-    }
-
-    function withdrawerc(address _Token, uint256 _Amount) external onlyOwner {
-        IERC20(_Token).transfer(msg.sender, _Amount);
     }
 }
