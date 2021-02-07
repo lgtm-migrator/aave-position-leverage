@@ -14,7 +14,7 @@ import {
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
 import { LeverageButton } from 'utils/takeloan';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
 import sleep from 'utils/sleep';
@@ -52,8 +52,8 @@ export default function() {
     wethGatewayContract,
     lendingPoolContract,
     subgraph,
-  } = useWallet();
-  const { address } = useWallet();
+  } = UseWallet();
+  const { address } = UseWallet();
   const [isLoaded, setIsLoaded] = React.useState(false);
   const [deposits, setDeposits] = React.useState([]);
   const [debts, setDebts] = React.useState([]);
@@ -304,7 +304,7 @@ function Debt({ debt }) {
   const { tx } = useNotifications();
   const [leverage, setLeverage] = React.useState(2);
   const [slippage, setSlippage] = React.useState(2);
-  const { address } = useWallet();
+  const { address } = UseWallet();
 
   function valueText(value) {
     return `${value}x`;

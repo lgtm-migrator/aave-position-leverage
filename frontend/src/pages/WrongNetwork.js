@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { makeStyles } from '@material-ui/core/styles';
 import { Dialog, Button } from '@material-ui/core';
 import { Close as Icon } from '@material-ui/icons';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 
 const useStyles = makeStyles(theme => ({
   container: {
@@ -37,7 +37,7 @@ const useStyles = makeStyles(theme => ({
 
 export default function() {
   const classes = useStyles();
-  const { availableNetworkNames, network } = useWallet();
+  const { availableNetworkNames, network } = UseWallet();
   const isOnCorrectNetwork = React.useMemo(
     () =>
       !(network && availableNetworkNames) ||

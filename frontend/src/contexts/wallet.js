@@ -233,7 +233,7 @@ export function WalletProvider({ children }) {
   );
 }
 
-export function useWallet() {
+export function UseWallet() {
   const context = React.useContext(WalletContext);
   if (!context) {
     throw new Error('Missing wallet context');

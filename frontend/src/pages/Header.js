@@ -3,7 +3,7 @@ import { makeStyles } from '@material-ui/core/styles';
 import clsx from 'clsx';
 import { AppBar, Typography, Toolbar, Button, Box } from '@material-ui/core';
 import { APP_TITLE } from 'config';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 
 const useStyles = makeStyles(theme => ({
   container: {
@@ -20,7 +20,7 @@ const useStyles = makeStyles(theme => ({
 
 export default function Component() {
   const classes = useStyles();
-  const { address, connect, disconnect, network } = useWallet();
+  const { address, connect, disconnect, network } = UseWallet();
 
   const shortAddress =
     address && `${address.slice(0, 6)}....${address.slice(-4)}`;
@@ -31,13 +31,22 @@ export default function Component() {
         <Typography variant="h6" className={'flex flex-grow'}>
           <Box className={clsx('flex flex-col')}>
             <div>
-              {' '}
               <img
                 src="https://pbs.twimg.com/profile_images/1186270065085370368/J1YJtvdI_400x400.jpg"
                 height="50"
                 width="50"
-              />{' '}
-              <span className={classes.account}>{APP_TITLE}</span>
+              />
+              <img
+                src="https://pbs.twimg.com/profile_images/1348253739057098753/JWXLyjdz_400x400.jpg"
+                height="50"
+                width="50"
+              />
+              <span
+                className={classes.account}
+                style={{ position: 'absolute', top: 10, left: 130 }}
+              >
+                {APP_TITLE}
+              </span>
             </div>
           </Box>
         </Typography>

@@ -14,7 +14,7 @@ import {
   TextField,
 } from '@material-ui/core';
 import { formatUnits, isZero } from 'utils/big-number';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 import { useNotifications } from 'contexts/notifications';
 import { SUCCESS_COLOR, DANGER_COLOR } from 'config';
 import sleep from 'utils/sleep';
@@ -75,7 +75,7 @@ export default function() {
     wethGatewayContract,
     lendingPoolContract,
     subgraph,
-  } = useWallet();
+  } = UseWallet();
 
   const [collateralToken, setCollateralToken] = React.useState(null);
   const [debtToken, setDebtToken] = React.useState(null);
@@ -325,7 +325,7 @@ export default function() {
       <TextField
         id="outlined-basic"
         variant="outlined"
-        onChange={e => setCollateralAmount(parseInt(e.target.value))}
+        onChange={e => setCollateralAmount(e.target.value)}
       ></TextField>
       <br></br>
       {collateralAmount &&

@@ -4,7 +4,7 @@ import * as ethers from 'ethers';
 import { makeStyles } from '@material-ui/core/styles';
 import ERC20_CONTRACT_ABI from 'abis/erc20.json';
 import { formatUnits } from 'utils/big-number';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 import sleep from 'utils/sleep';
 
 const useStyles = makeStyles(theme => ({
@@ -12,13 +12,13 @@ const useStyles = makeStyles(theme => ({
 }));
 
 export default function({ isETH, tokenAddress }) {
-  const { signer } = useWallet();
+  const { signer } = UseWallet();
   return !signer ? null : isETH ? <ETH /> : <ERC20 {...{ tokenAddress }} />;
 }
 
 function ETH() {
   const classes = useStyles();
-  const { signer } = useWallet();
+  const { signer } = UseWallet();
   const [balance, setBalance] = React.useState(ethers.BigNumber.from('0'));
 
   React.useEffect(() => {
@@ -59,7 +59,7 @@ function ERC20({ tokenAddress }) {
   const [balance, setBalance] = React.useState(ethers.BigNumber.from('0'));
   const [decimals, setDecimals] = React.useState(null);
   const [symbol, setSymbol] = React.useState(null);
-  const { address, signer } = useWallet();
+  const { address, signer } = UseWallet();
 
   const contract = React.useMemo(
     () =>

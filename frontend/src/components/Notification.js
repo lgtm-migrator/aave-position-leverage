@@ -9,7 +9,7 @@ import {
   Close as CloseIcon,
 } from '@material-ui/icons';
 import { useSnackbar } from 'notistack';
-import { useWallet } from 'contexts/wallet';
+import { UseWallet } from 'contexts/wallet';
 import { INFO_COLOR, DANGER_COLOR, SUCCESS_COLOR } from 'config';
 
 const useStyles = makeStyles(theme => ({
@@ -122,7 +122,7 @@ function SuccessContent({ notification }) {
 
 function ViewOnEtherscan({ hash }) {
   const classes = useStyles();
-  const { network } = useWallet();
+  const { network } = UseWallet();
   return (
     <a
       href={`https://${
